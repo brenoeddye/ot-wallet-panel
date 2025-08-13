@@ -1,5 +1,11 @@
 # Fintools - Painel de carteiras de ativos
 
+![nuxt](https://img.shields.io/badge/Nuxt-50BB7A?style=for-the-badge)
+![vite](https://img.shields.io/badge/Vite-747bff?style=for-the-badge)
+![tailwind](https://img.shields.io/badge/Tailwind-00bcff?style=for-the-badge)
+
+<img src="/docs/desktop.png">
+
 Live preview:
 
 https://ot-wallet-panel.vercel.app
