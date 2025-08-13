@@ -1,7 +1,6 @@
-import type { User } from '~/interfaces';
+import type { User, FakeDataResponse } from '~/interfaces';
 import { filterService, type FilterParams } from './filters';
-
-const API_BASE_URL = import.meta.env.VITE_ENDPOINT_URL || 'http://localhost:3000'
+import fakeData from '~/api/data.json';
 
 export interface PaginatedResponse<T> {
   data: T[]
@@ -11,97 +10,39 @@ export interface PaginatedResponse<T> {
   perPage: number
 }
 
-interface JsonServerResponse<T> {
-  first: number
-  prev: number | null
-  next: number | null
-  last: number
-  pages: number
-  items: number
-  data: T[]
-}
+// Simula delay de rede
+const simulateNetworkDelay = (ms: number = 300) => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+// Dados locais simulando uma base de dados
+let localUsers: User[] = [...(fakeData as FakeDataResponse).users];
 
 export const usersService = {
   async getUsers(page: number = 1, perPage: number = 10): Promise<PaginatedResponse<User>> {
-    const endpoint = import.meta.env.VITE_LIST_USERS
-    if (!endpoint) {
-      throw new Error('Erro interno');
-    }
-
-    const searchParams = new URLSearchParams()
-    searchParams.append('_page', page.toString())
-    searchParams.append('_per_page', perPage.toString())
-
-    const url = `${API_BASE_URL}${endpoint}?${searchParams.toString()}`;
+    await simulateNetworkDelay();
     
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(`Erro: ${response.status} ${response.statusText}`)
-    }
-    
-    const jsonResponse: JsonServerResponse<User> = await response.json()
+    const startIndex = (page - 1) * perPage;
+    const endIndex = startIndex + perPage;
+    const paginatedUsers = localUsers.slice(startIndex, endIndex);
     
     return {
-      data: jsonResponse.data,
-      totalCount: jsonResponse.items,
-      totalPages: jsonResponse.pages,
+      data: paginatedUsers,
+      totalCount: localUsers.length,
+      totalPages: Math.ceil(localUsers.length / perPage),
       currentPage: page,
       perPage
     }
   },
 
   async searchUsers(filters: FilterParams, page: number = 1, perPage: number = 10): Promise<PaginatedResponse<User>> {
-    const endpoint = import.meta.env.VITE_LIST_USERS;
-
-    if (!endpoint) {
-      throw new Error('Erro interno');
-    }
-
-    const hasFilters = filters.nome || filters.sobrenome || filters.email;
+    await simulateNetworkDelay();
     
-    if (hasFilters) {
-      return this.searchUsersLocal(filters, page, perPage);
-    }
-
-    const searchParams = filterService.getSearchParams(filters, page, perPage)
-    const url = `${API_BASE_URL}${endpoint}?${searchParams.toString()}`;
-    
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(`Erro: ${response.status} ${response.statusText}`)
-    }
-    
-    const jsonResponse: JsonServerResponse<User> = await response.json()
-    
-    return {
-      data: jsonResponse.data,
-      totalCount: jsonResponse.items,
-      totalPages: jsonResponse.pages,
-      currentPage: page,
-      perPage
-    }
-  },
-
-  async searchUsersLocal(filters: FilterParams, page: number = 1, perPage: number = 10): Promise<PaginatedResponse<User>> {
-    const endpoint = import.meta.env.VITE_LIST_USERS;
-    if (!endpoint) {
-      throw new Error('Erro interno');
-    }
-
     const nomeFilter = filters.nome?.toLowerCase() || '';
     const sobrenomeFilter = filters.sobrenome?.toLowerCase() || '';
     const emailFilter = filters.email?.toLowerCase() || '';
     
-    const url = `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(url)
-    
-    if (!response.ok) {
-      throw new Error(`Erro: ${response.status} ${response.statusText}`)
-    }
-    
-    const allUsers: User[] = await response.json()
-    
-    const filteredUsers = allUsers.filter(user => {
+    const filteredUsers = localUsers.filter(user => {
       const nome = user.nome?.toLowerCase() || '';
       const sobrenome = user.sobrenome?.toLowerCase() || '';
       const email = user.email?.toLowerCase() || '';
@@ -126,84 +67,56 @@ export const usersService = {
     }
   },
 
-  async createUser(userData: Omit<User, 'id' | 'data_abertura' | 'endereco' | 'data_nascimento' | 'endereco_carteira'>): Promise<User> {
-    const endpoint = import.meta.env.VITE_CREATE_USER || '/users';
-    
-    if (!endpoint) {
-      throw new Error('Erro interno');
-    }
+  async searchUsersLocal(filters: FilterParams, page: number = 1, perPage: number = 10): Promise<PaginatedResponse<User>> {
+    return this.searchUsers(filters, page, perPage);
+  },
 
-    const newUser = {
+  async createUser(userData: Omit<User, 'id' | 'data_abertura' | 'endereco' | 'data_nascimento' | 'endereco_carteira'>): Promise<User> {
+    await simulateNetworkDelay();
+    
+    const newUser: User = {
       ...userData,
       id: crypto.randomUUID(),
       data_abertura: new Date().toISOString().split('T')[0] || '',
-      endereco: '',
-      data_nascimento: '',
-      endereco_carteira: '',
+      endereco: userData.endereco || '',
+      data_nascimento: userData.data_nascimento || '',
+      endereco_carteira: userData.endereco_carteira || '',
       moeda_origem: userData.moeda_origem || 'BRL',
       moeda_destino: userData.moeda_destino || 'BTC'
     };
 
-    const url = `${API_BASE_URL}${endpoint}`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(newUser)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro: ${response.status} ${response.statusText}`);
-    }
+    // Adiciona o novo usuário ao array local
+    localUsers.push(newUser);
 
     return newUser;
   },
 
   async updateUser(userData: User): Promise<User> {
-    const endpoint = import.meta.env.VITE_UPDATE_USER || '/users';
+    await simulateNetworkDelay();
     
-    if (!endpoint) {
-      throw new Error('Erro interno');
+    const userIndex = localUsers.findIndex(user => user.id === userData.id);
+    
+    if (userIndex === -1) {
+      throw new Error('Usuário não encontrado');
     }
 
-    const url = `${API_BASE_URL}${endpoint}/${userData.id}`;
-    
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(userData)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro: ${response.status} ${response.statusText}`);
-    }
+    // Atualiza o usuário no array local
+    localUsers[userIndex] = userData;
 
     return userData;
   },
 
   async deleteUser(userId: string): Promise<void> {
-    const endpoint = import.meta.env.VITE_DELETE_USER || '/users';
+    await simulateNetworkDelay();
     
-    if (!endpoint) {
-      throw new Error('Erro interno');
+    const userIndex = localUsers.findIndex(user => user.id === userId);
+    
+    if (userIndex === -1) {
+      throw new Error('Usuário não encontrado');
     }
 
-    const url = `${API_BASE_URL}${endpoint}/${userId}`;
-    
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro: ${response.status} ${response.statusText}`);
-    }
+    // Remove o usuário do array local
+    localUsers.splice(userIndex, 1);
   },
 
   exportToCSV(users: User[]): void {
@@ -237,5 +150,10 @@ export const usersService = {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  },
+
+  // Método para resetar os dados para o estado inicial (útil para demonstração)
+  resetToInitialData(): void {
+    localUsers = [...(fakeData as FakeDataResponse).users];
   }
 }
